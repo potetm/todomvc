@@ -14,13 +14,19 @@
 (defn set-new-item-text-facts [v]
   [[:db/add 1 :new-item/text v]])
 
-(defn save-new-todo-facts [db]
-  [{:db/id -1
-    :todo-item/sort-constant 1
-    :todo-item/text (get-new-item-text db)
-    :todo-item/state :incomplete
-    :todo-item/editing? false
-    :todo-item/needs-focus? false}])
+(defn save-new-todo-facts [v state]
+  {:pre [(#{:complete :incomplete} state)]}
+  (let [v (str/trim v)]
+    (when-not (str/blank? v)
+      [{:db/id -1
+        :todo-item/sort-constant 1
+        :todo-item/text v
+        :todo-item/state state
+        :todo-item/editing? false
+        :todo-item/needs-focus? false}])))
+
+(defn save-new-todo-from-input-facts [db]
+  (save-new-todo-facts (get-new-item-text db) :incomplete))
 
 (defn set-item-text-facts [id text]
   [[:db/add id :todo-item/text text]])
@@ -64,3 +70,22 @@
           (display? ?i)]
         db
         display?))))
+
+(defn all-items-complete? [db]
+  (= #{[:complete]}
+     (d/q
+       '[:find ?s
+         :where
+         [_ :todo-item/state ?s]]
+       db)))
+
+(defn set-all-states [db state]
+  {:pre [(#{:complete :incomplete} state)]}
+  (map
+    #(vector :db/add % :todo-item/state state)
+    (get-item-ids-to-display db)))
+
+(defn delete-all [db]
+  (map
+    (partial vector :db.fn/retractEntity)
+    (get-item-ids-to-display db)))

@@ -23,13 +23,33 @@
             (publish!
               (event :save-new-todo @conn {})))}
          [:input#new-todo
-          {:value item-text
+          {:ref "input"
+           :value item-text
            :on-change
            (fn [e]
              (publish!
                (event
                  :new-item-input/input-change @conn
-                 {:value (.. e -target -value)})))}]]))))
+                 {:value (.. e -target -value)})))}]])
+      fluxme/IDidMount
+      (did-mount [_ c]
+        (.focus (fluxme/get-dom-node (fluxme/get-ref c "input")))))))
+
+(def toggle-all
+  (component
+    (reify
+      fluxme/IFlux
+      (query [_ db]
+        (domain/all-items-complete? db))
+      (render [_ all-complete?]
+        [:input#toggle-all
+         {:type :checkbox
+          :checked all-complete?
+          :on-change
+          (fn [_]
+            (publish!
+              (event
+                :set-all-states @conn {:complete? (not all-complete?)})))}]))))
 
 (defn item-edit [id item]
   [:input.edit
@@ -106,6 +126,13 @@
         [:ul#todo-list
          (map #(item {:item-id %}) item-ids)]))))
 
+#_(def footer
+  (component
+    (reify
+      fluxme/IFlux
+      (query [_])
+      (render [_]))))
+
 (def todo-app
   (component
     (reify
@@ -116,8 +143,29 @@
          [:header#header]
          (new-item-input)
          [:section
-          #_(toggle-all)
+          (toggle-all)
           (item-list)]
          #_(footer)]))))
 
 (fluxme/mount-app (todo-app) (js/document.getElementById "todoapp"))
+
+(aset js/window "benchmark1"
+  (fn [_]
+    (dotimes [_ 200]
+      (publish!
+        (event
+          :add-todo nil {:text "foo", :status :incomplete})))))
+
+(aset js/window "benchmark2"
+  (fn [_]
+    (dotimes [_ 200]
+      (publish!
+        (event
+          :add-todo nil {:text "foo", :status :incomplete})))
+    (dotimes [i 5]
+      (publish!
+        (event
+          :set-all-states @conn {:complete? (= 0 (mod i 2))})))
+    (publish!
+      (event
+        :delete-all @conn {}))))

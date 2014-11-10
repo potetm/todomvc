@@ -18,7 +18,7 @@
   (go-loop []
     (when-some [{:keys [db]} (<! save-new-todo)]
       (d/transact conn
-                  (concat (domain/save-new-todo-facts db)
+                  (concat (domain/save-new-todo-from-input-facts db)
                           (domain/set-new-item-text-facts "")))
       (recur))))
 
@@ -53,4 +53,23 @@
   (go-loop []
     (when-some [{{:keys [id]} :subjects} (<! todo-item-delete)]
       (d/transact conn (domain/delete-item id))
+      (recur))))
+
+(add-subscriber set-all-states 20 [:set-all-states]
+  (go-loop []
+    (when-some [{{:keys [complete?]} :subjects
+                 db :db} (<! set-all-states)]
+      (d/transact conn (domain/set-all-states @conn (if complete? :complete :incomplete)))
+      (recur))))
+
+(add-subscriber add-todo 100 [:add-todo]
+  (go-loop []
+    (when-some [{{:keys [text status]} :subjects} (<! add-todo)]
+      (d/transact conn (domain/save-new-todo-facts text status))
+      (recur))))
+
+(add-subscriber delete-all 100 [:delete-all]
+  (go-loop []
+    (when-some [{:keys [db]} (<! delete-all)]
+      (d/transact conn (domain/delete-all @conn))
       (recur))))
