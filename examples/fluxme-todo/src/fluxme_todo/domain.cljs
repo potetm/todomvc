@@ -8,6 +8,13 @@
   [[:db/add 1 :new-item/text ""]
    [:db/add 2 :item-state-display :all]])
 
+(defn set-item-state-display [state]
+  {:pre [(#{:all :incomplete :complete} state)]}
+  [[:db/add 2 :item-state-display state]])
+
+(defn get-item-state-display [db]
+  (:item-state-display (d/entity db 2)))
+
 (defn get-new-item-text [db]
   (:new-item/text (d/entity db 1)))
 
@@ -49,27 +56,29 @@
     (when (str/blank? (:todo-item/text (d/entity db id)))
       (delete-item id))))
 
-(def display?
-  '[[(display? ?i)
-     [2 :item-state-display ?s]
-     [?i :todo-item/state ?s]]
-    [(display? ?i)
-     [2 :item-state-display :all]]])
-
 (defn get-item-ids-to-display [db]
-  (map
-    first
-    (sort-by
-      second
-      (d/q
-        '[:find ?i ?tx
-          :in $ %
-          :where
-          [?i :todo-item/text ?v]
-          [?i :todo-item/sort-constant _ ?tx]
-          (display? ?i)]
-        db
-        display?))))
+  (let [state (get-item-state-display db)]
+    (map
+      first
+      (sort-by
+        second
+        (if (= :all state)
+          (d/q
+            '[:find ?i ?tx
+              :in $ ?s
+              :where
+              [?i :todo-item/text ?v]
+              [?i :todo-item/sort-constant _ ?tx]]
+            db)
+          (d/q
+            '[:find ?i ?tx
+              :in $ ?s
+              :where
+              [?i :todo-item/text ?v]
+              [?i :todo-item/sort-constant _ ?tx]
+              [?i :todo-item/state ?s]]
+            db
+            state))))))
 
 (defn all-items-complete? [db]
   (= #{[:complete]}
@@ -89,3 +98,21 @@
   (map
     (partial vector :db.fn/retractEntity)
     (get-item-ids-to-display db)))
+
+(defn get-incomplete-count [db]
+  (ffirst
+    (d/q
+      '[:find (count ?i)
+        :where
+        [?i :todo-item/state :incomplete]]
+      db)))
+
+(defn get-total-item-count [db]
+  (or
+    (ffirst
+      (d/q
+        '[:find (count ?i)
+          :where
+          [?i :todo-item/text]]
+        db))
+    0))

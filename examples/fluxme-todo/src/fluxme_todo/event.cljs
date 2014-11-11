@@ -73,3 +73,13 @@
     (when-some [{:keys [db]} (<! delete-all)]
       (d/transact conn (domain/delete-all @conn))
       (recur))))
+
+(add-subscriber filter 100 [:filter]
+  (go-loop []
+    (when-some [{{:keys [showing]} :subjects} (<! filter)]
+      (when (#{:all :active :completed} showing)
+        (d/transact conn (domain/set-item-state-display (condp = showing
+                                                          :active :incomplete
+                                                          :completed :complete
+                                                          showing))))
+      (recur))))

@@ -2,12 +2,34 @@
   (:require [datascript :as d]
             [fluxme.core :as fluxme
              :refer [conn component publish! event]]
-            [fluxme-todo.domain :as domain]))
+            [fluxme-todo.domain :as domain]
+            [goog.events :as events]
+            [goog.history.EventType :as EventType]
+            [secretary.core :as secretary :refer-macros [defroute]])
+  (:import [goog History]))
 
 (enable-console-print!)
 
 (fluxme/init-conn! (d/create-conn domain/schema))
 (d/transact conn domain/initial-state)
+
+(def history (History.))
+
+(doto history
+  (events/listen
+    EventType/NAVIGATE
+    (fn [e] (secretary/dispatch! (.-token e))))
+  (.setEnabled true))
+
+(defroute "/" []
+  (publish!
+    (event
+      :filter @conn {:showing :all})))
+
+(defroute "/:showing" [showing]
+  (publish!
+    (event
+      :filter @conn {:showing (keyword showing)})))
 
 (def new-item-input
   (component
@@ -24,6 +46,7 @@
               (event :save-new-todo @conn {})))}
          [:input#new-todo
           {:ref "input"
+           :placeholder "What needs to be done?"
            :value item-text
            :on-change
            (fn [e]
@@ -103,8 +126,8 @@
            {:class (cond
                      complete? "completed"
                      editing? "editing")}
-           (item-edit item-id item)
-           (display-item item-id item)]))
+           (display-item item-id item)
+           (item-edit item-id item)]))
       fluxme/IDidUpdate
       (did-update [_ comp props state]
         (let [node (fluxme/get-dom-node (fluxme/get-ref comp "editItemInput"))
@@ -126,26 +149,43 @@
         [:ul#todo-list
          (map #(item {:item-id %}) item-ids)]))))
 
-#_(def footer
+(def footer
   (component
     (reify
       fluxme/IFlux
-      (query [_])
-      (render [_]))))
+      (query [_ db]
+        [(domain/get-incomplete-count db)
+         (domain/get-item-state-display db)])
+      (render [_ [count display-state]]
+        (let [sel? #(when (= display-state %) "selected")]
+          [:footer#footer
+           [:span#todo-count
+            [:strong count]
+            " items left"]
+           [:ul#filters
+            [:li
+             [:a {:href "#/", :class (sel? :all)} "All"]]
+            [:li
+             [:a {:href "#/active", :class (sel? :incomplete)} "Active"]]
+            [:li
+             [:a {:href "#/completed", :class (sel? :complete)} "Completed"]]]])))))
 
 (def todo-app
   (component
     (reify
       fluxme/IFlux
-      (query [_ _db] nil)
-      (render [_ _v]
+      (query [_ db]
+        (domain/get-total-item-count db))
+      (render [_ count]
         [:div
-         [:header#header]
-         (new-item-input)
-         [:section
-          (toggle-all)
-          (item-list)]
-         #_(footer)]))))
+         [:header#header
+          [:h1 "todos"]
+          (new-item-input)
+          [:section#main
+           (toggle-all)
+           (item-list)]
+          (when-not (zero? count)
+            (footer))]]))))
 
 (fluxme/mount-app (todo-app) (js/document.getElementById "todoapp"))
 
