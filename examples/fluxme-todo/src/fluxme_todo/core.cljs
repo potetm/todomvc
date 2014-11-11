@@ -34,6 +34,10 @@
 (def new-item-input
   (component
     (reify
+      fluxme/IUpdateInAnimationFrame
+      fluxme/IUpdateForFactParts
+      (fact-parts [_]
+        [[1 :new-item/text]])
       fluxme/IFlux
       (query [_ db]
         (domain/get-new-item-text db))
@@ -61,6 +65,10 @@
 (def toggle-all
   (component
     (reify
+      fluxme/IUpdateInAnimationFrame
+      fluxme/IUpdateForFactParts
+      (fact-parts [_]
+        [[nil :todo-item/state]])
       fluxme/IFlux
       (query [_ db]
         (domain/all-items-complete? db))
@@ -116,6 +124,10 @@
 (def item
   (component
     (reify
+      fluxme/IUpdateInAnimationFrame
+      fluxme/IUpdateForFactParts
+      (fact-parts [_ {:keys [item-id]}]
+        [[item-id]])
       fluxme/IFlux
       (query [_ {:keys [item-id]} db]
         (into {} (d/entity db item-id)))
@@ -142,16 +154,26 @@
 (def item-list
   (component
     (reify
+      fluxme/IUpdateInAnimationFrame
+      fluxme/IUpdateForFactParts
+      (fact-parts [_]
+        [[2 :item-state-display]
+         [nil :todo-item/state]])
       fluxme/IFlux
       (query [_ db]
         (domain/get-item-ids-to-display db))
       (render [_ item-ids]
         [:ul#todo-list
-         (map #(item {:item-id %}) item-ids)]))))
+         (map #(item {:key % :item-id %}) item-ids)]))))
 
 (def footer
   (component
     (reify
+      fluxme/IUpdateInAnimationFrame
+      fluxme/IUpdateForFactParts
+      (fact-parts [_]
+        [[nil :todo-item/state :incomplete]
+         [2 :item-state-display]])
       fluxme/IFlux
       (query [_ db]
         [(domain/get-incomplete-count db)
@@ -173,6 +195,10 @@
 (def todo-app
   (component
     (reify
+      fluxme/IUpdateInAnimationFrame
+      fluxme/IUpdateForFactParts
+      (fact-parts [_]
+        [[nil :todo-item/text]])
       fluxme/IFlux
       (query [_ db]
         (domain/get-total-item-count db))
