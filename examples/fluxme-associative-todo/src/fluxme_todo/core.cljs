@@ -10,8 +10,7 @@
 
 (enable-console-print!)
 
-(fluxme/init-datascript-conn! (d/create-conn domain/schema))
-(d/transact conn domain/initial-state)
+(fluxme/init-associative-conn! (atom domain/initial-state))
 
 (def history (History.))
 
@@ -35,9 +34,6 @@
   (component
     (reify
       fluxme/IUpdateInAnimationFrame
-      fluxme/IUpdateForFactParts
-      (fact-parts [_]
-        [[1 :new-item/text]])
       fluxme/IFlux
       (query [_ db]
         (domain/get-new-item-text db))
@@ -66,9 +62,6 @@
   (component
     (reify
       fluxme/IUpdateInAnimationFrame
-      fluxme/IUpdateForFactParts
-      (fact-parts [_]
-        [[nil :todo-item/state]])
       fluxme/IFlux
       (query [_ db]
         (domain/all-items-complete? db))
@@ -107,7 +100,7 @@
   [:div.view
    [:input.toggle
     {:type :checkbox
-     :checked (when (= :complete (:todo-item/state item)) "checked")
+     :checked (when (= :complete (:state item)) "checked")
      :on-change #(publish!
                   (event
                     :todo-item/toggle-complete @conn {:id id}))}]
@@ -115,7 +108,7 @@
     {:on-double-click #(publish!
                         (event
                           :todo-item/start-editing @conn {:id id}))}
-    (:todo-item/text item)]
+    (:text item)]
    [:button.destroy
     {:on-click #(publish!
                  (event
@@ -125,15 +118,12 @@
   (component
     (reify
       fluxme/IUpdateInAnimationFrame
-      fluxme/IUpdateForFactParts
-      (fact-parts [_ {:keys [item-id]}]
-        [[item-id]])
       fluxme/IFlux
       (query [_ {:keys [item-id]} db]
-        (into {} (d/entity db item-id)))
+        (domain/get-item-by-id db item-id))
       (render [_ {:keys [item-id]} item]
-        (let [complete? (= :complete (:todo-item/state item))
-              editing? (:todo-item/editing? item)]
+        (let [complete? (= :complete (:state item))
+              editing? (:editing? item)]
           [:li
            {:class (cond
                      complete? "completed"
@@ -144,7 +134,7 @@
       (did-update [_ comp props state]
         (let [node (fluxme/get-dom-node (fluxme/get-ref comp "editItemInput"))
               len (.. node -value -length)]
-          (when (:todo-item/needs-focus? state)
+          (when (:needs-focus? state)
             (.focus node)
             (.setSelectionRange node len len)
             (publish!
@@ -155,10 +145,6 @@
   (component
     (reify
       fluxme/IUpdateInAnimationFrame
-      fluxme/IUpdateForFactParts
-      (fact-parts [_]
-        [[2 :item-state-display]
-         [nil :todo-item/state]])
       fluxme/IFlux
       (query [_ db]
         (domain/get-item-ids-to-display db))
@@ -170,10 +156,6 @@
   (component
     (reify
       fluxme/IUpdateInAnimationFrame
-      fluxme/IUpdateForFactParts
-      (fact-parts [_]
-        [[nil :todo-item/state :incomplete]
-         [2 :item-state-display]])
       fluxme/IFlux
       (query [_ db]
         [(domain/get-incomplete-count db)
@@ -196,9 +178,6 @@
   (component
     (reify
       fluxme/IUpdateInAnimationFrame
-      fluxme/IUpdateForFactParts
-      (fact-parts [_]
-        [[nil :todo-item/text]])
       fluxme/IFlux
       (query [_ db]
         (domain/get-total-item-count db))
