@@ -1,8 +1,8 @@
-(ns fluxme-todo.core
+(ns phi-todo.core
   (:require [datascript :as d]
-            [fluxme.core :as fluxme
+            [phi.core :as phi
              :refer [conn component publish! event]]
-            [fluxme-todo.domain :as domain]
+            [phi-todo.domain :as domain]
             [goog.events :as events]
             [goog.history.EventType :as EventType]
             [secretary.core :as secretary :refer-macros [defroute]])
@@ -10,7 +10,8 @@
 
 (enable-console-print!)
 
-(fluxme/init-associative-conn! (atom domain/initial-state))
+(phi/init-datascript-conn! (d/create-conn domain/schema))
+(d/transact conn domain/initial-state)
 
 (def history (History.))
 
@@ -33,8 +34,11 @@
 (def new-item-input
   (component
     (reify
-      fluxme/IUpdateInAnimationFrame
-      fluxme/IFlux
+      phi/IUpdateInAnimationFrame
+      phi/IUpdateForFactParts
+      (fact-parts [_]
+        [[1 :new-item/text]])
+      phi/IPhi
       (query [_ db]
         (domain/get-new-item-text db))
       (render [_ item-text]
@@ -54,15 +58,18 @@
                (event
                  :new-item-input/input-change @conn
                  {:value (.. e -target -value)})))}]])
-      fluxme/IDidMount
+      phi/IDidMount
       (did-mount [_ c]
-        (.focus (fluxme/get-dom-node (fluxme/get-ref c "input")))))))
+        (.focus (phi/get-dom-node (phi/get-ref c "input")))))))
 
 (def toggle-all
   (component
     (reify
-      fluxme/IUpdateInAnimationFrame
-      fluxme/IFlux
+      phi/IUpdateInAnimationFrame
+      phi/IUpdateForFactParts
+      (fact-parts [_]
+        [[nil :todo-item/state]])
+      phi/IPhi
       (query [_ db]
         (domain/all-items-complete? db))
       (render [_ all-complete?]
@@ -100,7 +107,7 @@
   [:div.view
    [:input.toggle
     {:type :checkbox
-     :checked (when (= :complete (:state item)) "checked")
+     :checked (when (= :complete (:todo-item/state item)) "checked")
      :on-change #(publish!
                   (event
                     :todo-item/toggle-complete @conn {:id id}))}]
@@ -108,7 +115,7 @@
     {:on-double-click #(publish!
                         (event
                           :todo-item/start-editing @conn {:id id}))}
-    (:text item)]
+    (:todo-item/text item)]
    [:button.destroy
     {:on-click #(publish!
                  (event
@@ -117,24 +124,27 @@
 (def item
   (component
     (reify
-      fluxme/IUpdateInAnimationFrame
-      fluxme/IFlux
+      phi/IUpdateInAnimationFrame
+      phi/IUpdateForFactParts
+      (fact-parts [_ {:keys [item-id]}]
+        [[item-id]])
+      phi/IPhi
       (query [_ {:keys [item-id]} db]
-        (domain/get-item-by-id db item-id))
+        (into {} (d/entity db item-id)))
       (render [_ {:keys [item-id]} item]
-        (let [complete? (= :complete (:state item))
-              editing? (:editing? item)]
+        (let [complete? (= :complete (:todo-item/state item))
+              editing? (:todo-item/editing? item)]
           [:li
            {:class (cond
                      complete? "completed"
                      editing? "editing")}
            (display-item item-id item)
            (item-edit item-id item)]))
-      fluxme/IDidUpdate
+      phi/IDidUpdate
       (did-update [_ comp props state]
-        (let [node (fluxme/get-dom-node (fluxme/get-ref comp "editItemInput"))
+        (let [node (phi/get-dom-node (phi/get-ref comp "editItemInput"))
               len (.. node -value -length)]
-          (when (:needs-focus? state)
+          (when (:todo-item/needs-focus? state)
             (.focus node)
             (.setSelectionRange node len len)
             (publish!
@@ -144,8 +154,12 @@
 (def item-list
   (component
     (reify
-      fluxme/IUpdateInAnimationFrame
-      fluxme/IFlux
+      phi/IUpdateInAnimationFrame
+      phi/IUpdateForFactParts
+      (fact-parts [_]
+        [[2 :item-state-display]
+         [nil :todo-item/state]])
+      phi/IPhi
       (query [_ db]
         (domain/get-item-ids-to-display db))
       (render [_ item-ids]
@@ -155,8 +169,12 @@
 (def footer
   (component
     (reify
-      fluxme/IUpdateInAnimationFrame
-      fluxme/IFlux
+      phi/IUpdateInAnimationFrame
+      phi/IUpdateForFactParts
+      (fact-parts [_]
+        [[nil :todo-item/state :incomplete]
+         [2 :item-state-display]])
+      phi/IPhi
       (query [_ db]
         [(domain/get-incomplete-count db)
          (domain/get-item-state-display db)])
@@ -177,8 +195,11 @@
 (def todo-app
   (component
     (reify
-      fluxme/IUpdateInAnimationFrame
-      fluxme/IFlux
+      phi/IUpdateInAnimationFrame
+      phi/IUpdateForFactParts
+      (fact-parts [_]
+        [[nil :todo-item/text]])
+      phi/IPhi
       (query [_ db]
         (domain/get-total-item-count db))
       (render [_ count]
@@ -192,7 +213,7 @@
           (when-not (zero? count)
             (footer))]]))))
 
-(fluxme/mount-app (todo-app) (js/document.getElementById "todoapp"))
+(phi/mount-app (todo-app) (js/document.getElementById "todoapp"))
 
 (aset js/window "benchmark1"
   (fn [_]

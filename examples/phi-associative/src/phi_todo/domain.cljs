@@ -1,4 +1,4 @@
-(ns fluxme-todo.domain
+(ns phi-todo.domain
   (:require [clojure.string :as str]
             [datascript :as d]))
 
