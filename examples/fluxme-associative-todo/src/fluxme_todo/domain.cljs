@@ -77,7 +77,7 @@
         (:todo-items db)))))
 
 (defn all-items-complete? [db]
-  (every? #{:complete} (:todo-items db)))
+  (every? (comp #{:complete} :state) (:todo-items db)))
 
 (defn set-all-states [db state]
   {:pre [(#{:complete :incomplete} state)]}
