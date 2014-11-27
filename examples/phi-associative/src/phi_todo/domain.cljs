@@ -1,6 +1,6 @@
 (ns phi-todo.domain
-  (:require [clojure.string :as str]
-            [datascript :as d]))
+  (:require [clojure.string :as str])
+  (:import [goog.ui IdGenerator]))
 
 (def initial-state
   {:new-item/text ""
@@ -26,7 +26,8 @@
     (when-not (str/blank? v)
       (update-in db [:todo-items]
                  conj
-                 {:text v
+                 {:id (.getNextUniqueId (.getInstance IdGenerator))
+                  :text v
                   :state state
                   :editing? false
                   :needs-focus? false}))))
@@ -41,60 +42,62 @@
   (update-in db [:todo-items id :state] {:incomplete :complete
                                          :complete :incomplete}))
 
-(defn get-item-by-id [db id]
-  (get-in db [:todo-items id]))
-
-(defn delete-item [db id]
+(defn delete-item [db index]
   (update-in
     db [:todo-items]
     (fn [items]
-      (vec (concat (subvec items 0 id)
-                   (subvec items (inc id)))))))
+      (vec (concat (subvec items 0 index)
+                   (subvec items (inc index)))))))
 
-(defn start-item-edit [db id]
+(defn start-item-edit [db index]
   (update-in
-    db [:todo-items id]
+    db [:todo-items index]
     assoc :editing? true :needs-focus? true))
 
-(defn stop-item-edit [db id]
+(defn set-item-focus [db index focus?]
+  (update-in
+    db [:todo-items index]
+    assoc :needs-focus? focus?))
+
+(defn stop-item-edit [db index]
   (update-in
     db [:todo-items]
     (fn [items]
-      (let [item (get items id)]
+      (let [item (get items index)]
         (if (str/blank? (:text item))
-          (dissoc items id)
-          (update-in items [id :editing] false))))))
+          (remove (partial = item) items)
+          (assoc-in items [index :editing?] false))))))
 
-(defn get-item-ids-to-display [db]
+(defn display-item? [state-display item]
+  (or (= :all state-display)
+      (= (:state item) state-display)))
+
+(defn get-items-to-display [db]
   (let [state (get-item-state-display db)]
-    (remove
-      nil?
-      (map-indexed
-        (fn [id v]
-          (when (or (= :all state)
-                    (= (:state v) state))
-            id))
-        (:todo-items db)))))
+    (keep
+      (fn [v]
+        (when (display-item? state v)
+          v))
+      (:todo-items db))))
 
 (defn all-items-complete? [db]
   (every? (comp #{:complete} :state) (:todo-items db)))
 
 (defn set-all-states [db state]
   {:pre [(#{:complete :incomplete} state)]}
-  (let [ids (set (get-item-ids-to-display db))]
+  (let [display-state (get-item-state-display db)]
     (update-in
       db [:todo-items]
       (fn [items]
-        (vec
-          (map-indexed
-            (fn [id item]
-              (if-not (ids id)
-                item
-                (assoc item :state state)))
-            items))))))
+        (mapv
+          (fn [item]
+            (if (display-item? display-state item)
+              (assoc item :state state)
+              item))
+          items)))))
 
 (defn delete-all [db]
-  (let [ids (set (get-item-ids-to-display db))]
+  (let [ids (set (get-items-to-display db))]
     (update-in
       db [:todo-items]
       (fn [items]
@@ -107,4 +110,4 @@
       (:todo-items db))))
 
 (defn get-total-item-count [db]
-  (count (:todo-item db)))
+  (count (:todo-items db)))

@@ -1,16 +1,15 @@
 (ns phi-todo.core
-  (:require [datascript :as d]
-            [phi.core :as phi
-             :refer [conn component publish! event]]
-            [phi-todo.domain :as domain]
-            [goog.events :as events]
+  (:require [goog.events :as events]
             [goog.history.EventType :as EventType]
+            [phi.core :as phi :refer [conn component publish! event]]
+            [phi-todo.domain :as d]
+            [phi-todo.event :as e]
             [secretary.core :as secretary :refer-macros [defroute]])
   (:import [goog History]))
 
 (enable-console-print!)
 
-(phi/init-associative-conn! (atom domain/initial-state))
+(phi/init-conn! (atom d/initial-state))
 
 (def history (History.))
 
@@ -22,146 +21,132 @@
 
 (defroute "/" []
   (publish!
-    (event
-      :filter @conn {:showing :all})))
+    (event ::e/filter {:showing :all})))
 
 (defroute "/:showing" [showing]
   (publish!
-    (event
-      :filter @conn {:showing (keyword showing)})))
+    (event ::e/filter {:showing (keyword showing)})))
 
 (def new-item-input
   (component
     (reify
-      phi/IUpdateInAnimationFrame
       phi/IPhi
-      (query [_ db]
-        (domain/get-new-item-text db))
-      (render [_ item-text]
-        [:form
-         {:on-submit
-          (fn [e]
-            (.preventDefault e)
-            (publish!
-              (event :save-new-todo @conn {})))}
-         [:input#new-todo
-          {:ref "input"
-           :placeholder "What needs to be done?"
-           :value item-text
-           :on-change
-           (fn [e]
-             (publish!
-               (event
-                 :new-item-input/input-change @conn
-                 {:value (.. e -target -value)})))}]])
+      (render [_ db]
+        (let [item-text (d/get-new-item-text db)]
+          [:form
+           {:on-submit
+            (fn [e]
+              (.preventDefault e)
+              (publish!
+                (event ::e/save-new-todo {})))}
+           [:input#new-todo
+            {:ref "input"
+             :placeholder "What needs to be done?"
+             :value item-text
+             :on-change
+             (fn [e]
+               (publish!
+                 (event
+                   ::e/new-item-input-changed {:value (.. e -target -value)})))}]]))
       phi/IDidMount
       (did-mount [_ c]
-        (.focus (phi/get-dom-node (phi/get-ref c "input")))))))
+        (.focus (phi/get-child-node c "input"))))))
 
 (def toggle-all
   (component
     (reify
-      phi/IUpdateInAnimationFrame
       phi/IPhi
-      (query [_ db]
-        (domain/all-items-complete? db))
-      (render [_ all-complete?]
-        [:input#toggle-all
-         {:type :checkbox
-          :checked all-complete?
-          :on-change
-          (fn [_]
-            (publish!
-              (event
-                :set-all-states @conn {:complete? (not all-complete?)})))}]))))
+      (render [_ db]
+        (let [all-complete? (d/all-items-complete? db)]
+          [:input#toggle-all
+           {:type :checkbox
+            :checked (not all-complete?)
+            :on-change
+            (fn [_]
+              (publish!
+                (event
+                  ::e/set-all-states {:complete? (not all-complete?)})))}])))))
 
-(defn item-edit [id item]
+(defn item-edit [index item]
   [:input.edit
    {:ref :editItemInput
-    :value (:todo-item/text item)
+    :value (:text item)
     :on-change
     (fn [e]
       (publish!
         (event
-          :todo-item/set-text @conn {:id id, :text (.. e -target -value)})))
+          :todo-item/set-text {:index index, :text (.. e -target -value)})))
     :on-blur
     (fn [e]
       (publish!
         (event
-          :todo-item/stop-editing @conn {:id id})))
+          :todo-item/stop-editing {:index index})))
     :on-key-down
     (fn [e]
       (when (#{13 27} (.-which e))
         (publish!
           (event
-            :todo-item/stop-editing @conn {:id id}))))}])
+            :todo-item/stop-editing {:index index}))))}])
 
-(defn display-item [id item]
+(defn display-item [index item]
   [:div.view
    [:input.toggle
     {:type :checkbox
      :checked (when (= :complete (:state item)) "checked")
      :on-change #(publish!
                   (event
-                    :todo-item/toggle-complete @conn {:id id}))}]
+                    :todo-item/toggle-complete {:index index}))}]
    [:label
     {:on-double-click #(publish!
                         (event
-                          :todo-item/start-editing @conn {:id id}))}
+                          :todo-item/start-editing {:index index}))}
     (:text item)]
    [:button.destroy
     {:on-click #(publish!
                  (event
-                   :todo-item/delete @conn {:id id}))}]])
+                   :todo-item/delete {:index index}))}]])
 
 (def item
   (component
     (reify
-      phi/IUpdateInAnimationFrame
-      phi/IPhi
-      (query [_ {:keys [item-id]} db]
-        (domain/get-item-by-id db item-id))
-      (render [_ {:keys [item-id]} item]
+      phi/IPhiProps
+      (render-props [_ {:keys [index item]}]
         (let [complete? (= :complete (:state item))
               editing? (:editing? item)]
           [:li
            {:class (cond
                      complete? "completed"
                      editing? "editing")}
-           (display-item item-id item)
-           (item-edit item-id item)]))
+           (display-item index item)
+           (item-edit index item)]))
       phi/IDidUpdate
-      (did-update [_ comp props state]
-        (let [node (phi/get-dom-node (phi/get-ref comp "editItemInput"))
+      (did-update [_ comp {:keys [index item]}]
+        (let [node (phi/get-child-node comp "editItemInput")
               len (.. node -value -length)]
-          (when (:needs-focus? state)
+          (when (:needs-focus? item)
             (.focus node)
             (.setSelectionRange node len len)
             (publish!
               (event
-                :todo-item/focused @conn {:id (:item-id props)}))))))))
+                :todo-item/focused {:index index}))))))))
 
 (def item-list
   (component
     (reify
-      phi/IUpdateInAnimationFrame
       phi/IPhi
-      (query [_ db]
-        (domain/get-item-ids-to-display db))
-      (render [_ item-ids]
-        [:ul#todo-list
-         (map #(item {:key % :item-id %}) item-ids)]))))
+      (render [_ db]
+        (let [items (d/get-items-to-display db)]
+          [:ul#todo-list
+           (map-indexed #(item {:index %1, :key (:id %2), :item %2}) items)])))))
 
 (def footer
   (component
     (reify
-      phi/IUpdateInAnimationFrame
       phi/IPhi
-      (query [_ db]
-        [(domain/get-incomplete-count db)
-         (domain/get-item-state-display db)])
-      (render [_ [count display-state]]
-        (let [sel? #(when (= display-state %) "selected")]
+      (render [_ db]
+        (let [count (d/get-incomplete-count db)
+              display-state (d/get-item-state-display db)
+              sel? #(when (= display-state %) "selected")]
           [:footer#footer
            [:span#todo-count
             [:strong count]
@@ -177,40 +162,17 @@
 (def todo-app
   (component
     (reify
-      phi/IUpdateInAnimationFrame
       phi/IPhi
-      (query [_ db]
-        (domain/get-total-item-count db))
-      (render [_ count]
-        [:div
-         [:header#header
-          [:h1 "todos"]
-          (new-item-input)
-          [:section#main
-           (toggle-all)
-           (item-list)]
-          (when-not (zero? count)
-            (footer))]]))))
+      (render [_ db]
+        (let [count (d/get-total-item-count db)]
+          [:div
+           [:header#header
+            [:h1 "todos"]
+            (new-item-input db)
+            [:section#main
+             (toggle-all db)
+             (item-list db)]
+            (when-not (zero? count)
+              (footer db))]])))))
 
-(phi/mount-app (todo-app) (js/document.getElementById "todoapp"))
-
-(aset js/window "benchmark1"
-  (fn [_]
-    (dotimes [_ 200]
-      (publish!
-        (event
-          :add-todo nil {:text "foo", :status :incomplete})))))
-
-(aset js/window "benchmark2"
-  (fn [_]
-    (dotimes [_ 200]
-      (publish!
-        (event
-          :add-todo nil {:text "foo", :status :incomplete})))
-    (dotimes [i 5]
-      (publish!
-        (event
-          :set-all-states @conn {:complete? (= 0 (mod i 2))})))
-    (publish!
-      (event
-        :delete-all @conn {}))))
+(phi/mount-app todo-app (js/document.getElementById "todoapp"))
