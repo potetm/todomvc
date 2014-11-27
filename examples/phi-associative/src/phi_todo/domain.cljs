@@ -103,10 +103,22 @@
       (fn [items]
         (filterv ids items)))))
 
+(defn clear-completed [db]
+  (update-in
+    db [:todo-items]
+    (fn [items]
+      (filterv (comp (partial not= :complete) :state) items))))
+
 (defn get-incomplete-count [db]
   (count
     (filter
       (comp (partial = :incomplete) :state)
+      (:todo-items db))))
+
+(defn get-complete-count [db]
+  (count
+    (filter
+      (comp (partial = :complete) :state)
       (:todo-items db))))
 
 (defn get-total-item-count [db]

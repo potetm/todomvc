@@ -37,6 +37,9 @@
 (defn delete-all [_]
   (swap! conn domain/delete-all))
 
+(defn clear-complted [_]
+  (swap! conn domain/clear-completed))
+
 (defn filter-todos [{{:keys [showing]} :message}]
   (when (#{:all :active :completed} showing)
     (swap! conn domain/set-item-state-display
@@ -48,6 +51,7 @@
 (phi/routing-table
   (a/sliding-buffer 10)
   [[::add-todo] add-todo
+   [::clear-completed] clear-complted
    [::delete-all] delete-all
    [::filter] filter-todos
    [::new-item-input-changed] new-item-input-changed

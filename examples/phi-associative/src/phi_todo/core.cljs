@@ -144,12 +144,13 @@
     (reify
       phi/IPhi
       (render [_ db]
-        (let [count (d/get-incomplete-count db)
+        (let [count-incomplete (d/get-incomplete-count db)
+              count-complete (d/get-complete-count db)
               display-state (d/get-item-state-display db)
               sel? #(when (= display-state %) "selected")]
           [:footer#footer
            [:span#todo-count
-            [:strong count]
+            [:strong count-incomplete]
             " items left"]
            [:ul#filters
             [:li
@@ -157,7 +158,12 @@
             [:li
              [:a {:href "#/active", :class (sel? :incomplete)} "Active"]]
             [:li
-             [:a {:href "#/completed", :class (sel? :complete)} "Completed"]]]])))))
+             [:a {:href "#/completed", :class (sel? :complete)} "Completed"]]]
+           (when-not (zero? count-complete)
+             [:button#clear-completed
+              {:on-click #(publish!
+                           (event ::e/clear-completed {}))}
+              (str "Clear Complted (" count-complete ")")])])))))
 
 (def todo-app
   (component
