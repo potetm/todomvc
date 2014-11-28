@@ -2,84 +2,56 @@
   (:require-macros [cljs.core.async.macros :refer [go go-loop]])
   (:require [cljs.core.async :as a :refer [<! chan]]
             [datascript :as d]
-            [phi.core :as phi
-             :refer [conn]
-             :refer-macros [add-subscriber]]
+            [phi.core :as phi :refer [conn] :refer-macros [add-subscriber]]
             [phi-todo.domain :as domain]))
 
-(add-subscriber new-item-input-change 20 [:new-item-input/input-change]
-  (go-loop []
-    (when-some [{:keys [subjects]} (<! new-item-input-change)]
-      (d/transact conn
-                  (domain/set-new-item-text-facts (:value subjects)))
-      (recur))))
+(defn new-item-input-change [{{:keys [value]} :message}]
+  (d/transact conn
+              (domain/set-new-item-text-facts value)))
 
-(add-subscriber save-new-todo 20 [:save-new-todo]
-  (go-loop []
-    (when-some [{:keys [db]} (<! save-new-todo)]
-      (d/transact conn
-                  (concat (domain/save-new-todo-from-input-facts db)
-                          (domain/set-new-item-text-facts "")))
-      (recur))))
+(defn save-new-todo []
+  (d/transact conn
+              (concat (domain/save-new-todo-from-input-facts)
+                      (domain/set-new-item-text-facts ""))))
 
-(add-subscriber todo-item-set-text 20 [:todo-item/set-text]
-  (go-loop []
-    (when-some [{{:keys [id text]} :subjects} (<! todo-item-set-text)]
-      (d/transact conn (domain/set-item-text-facts id text))
-      (recur))))
+(defn todo-item-set-text [{{:keys [id text]} :message}]
+  (d/transact conn (domain/set-item-text-facts id text)))
 
-(add-subscriber todo-item-start-edit 20 [:todo-item/start-editing]
-  (go-loop []
-    (when-some [{{:keys [id]} :subjects
-                 db :db} (<! todo-item-start-edit)]
-      (d/transact conn (domain/start-item-edit id))
-      (recur))))
+(defn todo-item-start-edit [{{:keys [id]} :message}]
+  (d/transact conn (domain/start-item-edit id)))
 
-(add-subscriber todo-item-stop-edit 20 [:todo-item/stop-editing]
-  (go-loop []
-    (when-some [{{:keys [id]} :subjects
-                 db :db} (<! todo-item-stop-edit)]
-      (d/transact conn (domain/stop-item-edit db id))
-      (recur))))
+(defn todo-item-stop-edit [{{:keys [id]} :message}]
+  (d/transact conn [[:db.fn/call domain/stop-item-edit id]]))
 
-(add-subscriber todo-item-toggle-complete 20 [:todo-item/toggle-complete]
-  (go-loop []
-    (when-some [{{:keys [id]} :subjects
-                 db :db} (<! todo-item-toggle-complete)]
-      (d/transact conn (domain/toggle-item-state-facts db id))
-      (recur))))
+(defn todo-item-toggle-complete [{{:keys [id]} :message}]
+  (d/transact conn [[:db.fn/call domain/toggle-item-state-facts id]]))
 
-(add-subscriber todo-item-delete 20 [:todo-item/delete]
-  (go-loop []
-    (when-some [{{:keys [id]} :subjects} (<! todo-item-delete)]
-      (d/transact conn (domain/delete-item id))
-      (recur))))
+(defn todo-item-delete [{{:keys [id]} :message}]
+  (d/transact conn (domain/delete-item id)))
 
-(add-subscriber set-all-states 20 [:set-all-states]
-  (go-loop []
-    (when-some [{{:keys [complete?]} :subjects
-                 db :db} (<! set-all-states)]
-      (d/transact conn (domain/set-all-states @conn (if complete? :complete :incomplete)))
-      (recur))))
+(defn set-all-states [{{:keys [complete?]} :message}]
+  (d/transact conn [[:db.fn/call domain/set-all-states (if complete? :complete :incomplete)]]))
 
-(add-subscriber add-todo 100 [:add-todo]
-  (go-loop []
-    (when-some [{{:keys [text status]} :subjects} (<! add-todo)]
-      (d/transact conn (domain/save-new-todo-facts text status))
-      (recur))))
+(defn add-todo [{{:keys [text status]} :message}]
+  (d/transact conn (domain/save-new-todo-facts text status)))
 
-(add-subscriber delete-all 100 [:delete-all]
-  (go-loop []
-    (when-some [{:keys [db]} (<! delete-all)]
-      (d/transact conn (domain/delete-all @conn))
-      (recur))))
+(defn filter-items [{{:keys [showing]} :message}]
+  {:pre [(#{:all :active :completed} showing)]}
+  (d/transact conn (domain/set-item-state-display (condp = showing
+                                                    :active :incomplete
+                                                    :completed :complete
+                                                    showing))))
 
-(add-subscriber filter 100 [:filter]
-  (go-loop []
-    (when-some [{{:keys [showing]} :subjects} (<! filter)]
-      (when (#{:all :active :completed} showing)
-        (d/transact conn (domain/set-item-state-display (condp = showing
-                                                          :active :incomplete
-                                                          :completed :complete
-                                                          showing))))
-      (recur))))
+(phi/routing-table
+  (a/sliding-buffer 10)
+  [[:filter] filter-items
+   [:delete-all] #(d/transact conn [[:db.fn/call domain/delete-all]])
+   [:add-todo] add-todo
+   [:set-all-states] set-all-states
+   [:todo-item/delete] todo-item-delete
+   [:todo-item/toggle-complete] todo-item-toggle-complete
+   [:todo-item/stop-editing] todo-item-stop-edit
+   [:todo-item/start-editing] todo-item-start-edit
+   [:todo-item/set-text] todo-item-set-text
+   [:save-new-todo] save-new-todo
+   [:new-item-input/input-change] new-item-input-change])

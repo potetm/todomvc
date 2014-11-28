@@ -32,8 +32,11 @@
         :todo-item/editing? false
         :todo-item/needs-focus? false}])))
 
-(defn save-new-todo-from-input-facts [db]
-  (save-new-todo-facts (get-new-item-text db) :incomplete))
+(defn save-new-todo-facts* [db state]
+  (save-new-todo-facts (get-new-item-text db) state))
+
+(defn save-new-todo-from-input-facts []
+  [[:db.fn/call save-new-todo-facts* :incomplete]])
 
 (defn set-item-text-facts [id text]
   [[:db/add id :todo-item/text text]])
