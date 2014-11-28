@@ -119,8 +119,8 @@
                      editing? "editing")}
            (display-item index item)
            (item-edit index item)]))
-      phi/IDidUpdate
-      (did-update [_ comp {:keys [index item]}]
+      phi/IDidUpdateProps
+      (did-update-props [_ comp {:keys [index item]} _prev-props]
         (let [node (phi/get-child-node comp "editItemInput")
               len (.. node -value -length)]
           (when (:needs-focus? item)
