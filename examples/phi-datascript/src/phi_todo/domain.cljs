@@ -103,12 +103,24 @@
     (get-item-ids-to-display db)))
 
 (defn get-incomplete-count [db]
-  (ffirst
-    (d/q
-      '[:find (count ?i)
-        :where
-        [?i :todo-item/state :incomplete]]
-      db)))
+  (or
+    (ffirst
+      (d/q
+        '[:find (count ?i)
+          :where
+          [?i :todo-item/state :incomplete]]
+        db))
+    0))
+
+(defn get-complete-count [db]
+  (or
+    (ffirst
+      (d/q
+        '[:find (count ?i)
+          :where
+          [?i :todo-item/state :complete]]
+        db))
+    0))
 
 (defn get-total-item-count [db]
   (or
@@ -119,3 +131,12 @@
           [?i :todo-item/text]]
         db))
     0))
+
+(defn clear-completed [db]
+  (map
+    (partial cons :db.fn/retractEntity)
+    (d/q
+      '[:find ?i
+        :where
+        [?i :todo-item/state :complete]]
+      db)))

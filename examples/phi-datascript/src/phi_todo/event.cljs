@@ -35,6 +35,9 @@
 (defn add-todo [{{:keys [text status]} :message}]
   (d/transact conn (domain/save-new-todo-facts text status)))
 
+(defn clear-completed [_]
+  (d/transact conn [[:db.fn/call domain/clear-completed]]))
+
 (defn filter-items [{{:keys [showing]} :message}]
   {:pre [(#{:all :active :completed} showing)]}
   (d/transact conn (domain/set-item-state-display (condp = showing
@@ -54,4 +57,5 @@
    [:todo-item/start-editing] todo-item-start-edit
    [:todo-item/set-text] todo-item-set-text
    [:save-new-todo] save-new-todo
-   [:new-item-input/input-change] new-item-input-change])
+   [:new-item-input/input-change] new-item-input-change
+   [:clear-completed] clear-completed])
