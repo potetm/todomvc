@@ -163,7 +163,7 @@
              [:button#clear-completed
               {:on-click #(publish!
                            (event ::e/clear-completed {}))}
-              (str "Clear Complted (" count-complete ")")])])))))
+              (str "Clear Completed (" count-complete ")")])])))))
 
 (def todo-app
   (component
