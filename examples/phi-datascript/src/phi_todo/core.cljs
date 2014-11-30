@@ -116,7 +116,7 @@
   (component
     (reify
       phi/IPhi
-      (render [_ {:keys [item-id]} db]
+      (render [_ db {:keys [item-id]}]
         (let [item (d/entity db item-id)
               complete? (= :complete (:todo-item/state item))
               editing? (:todo-item/editing? item)]
@@ -127,7 +127,7 @@
            (display-item item-id item)
            (item-edit item-id item)]))
       phi/IDidUpdate
-      (did-update [_ comp {:keys [item-id]} this-db _prev-props _prev-db]
+      (did-update [_ comp this-db _prev-db {:keys [item-id]} _prev-props]
         (let [node (phi/get-dom-node (phi/get-ref comp "editItemInput"))
               len (.. node -value -length)]
           (when (:todo-item/needs-focus? (d/entity this-db item-id))
