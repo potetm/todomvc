@@ -16,7 +16,7 @@
                 :compiler {:optimizations :whitespace
                            :pretty-print true
                            :preamble ["react/react.js"]
-                           :output-to "target/todo.js"}}
+                           :output-to "todo.js"}}
                {:id "release"
                 :source-paths ["src"]
                 :compiler {:optimizations :advanced
@@ -24,4 +24,4 @@
                            :elide-asserts true
                            :preamble ["react/react.min.js"]
                            :externs ["react/externs/react.js"]
-                           :output-to "target/todo.js"}}]})
+                           :output-to "todo.js"}}]})
